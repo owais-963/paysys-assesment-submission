@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MiniPay</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <h1>MiniPay</h1>
+  <p class="subtitle">Minimal payments console (no authentication, local/evaluation use)</p>
+
+  <section>
+    <h2>Health</h2>
+    <button id="check-health">Check API health</button>
+    <pre id="health-result"></pre>
+  </section>
+
+  <section>
+    <h2>Create customer</h2>
+    <form id="customer-form">
+      <label for="customer-ref">Customer reference</label>
+      <input id="customer-ref" name="customer_ref" required maxlength="40" placeholder="CUST000001" />
+
+      <label for="customer-name">Name</label>
+      <input id="customer-name" name="name" required maxlength="120" placeholder="Jane Doe" />
+
+      <button type="submit">Create customer</button>
+    </form>
+    <pre id="customer-result"></pre>
+  </section>
+
+  <section>
+    <h2>Submit payment</h2>
+    <form id="payment-form">
+      <label for="payment-ref">Transaction reference</label>
+      <input id="payment-ref" name="transaction_ref" required maxlength="50" placeholder="TXN000001" />
+
+      <label for="payment-customer-id">Customer ID</label>
+      <input id="payment-customer-id" name="customer_id" type="number" min="1" required />
+
+      <label for="payment-amount">Amount</label>
+      <input id="payment-amount" name="amount" type="number" step="0.01" min="0.01" required />
+
+      <button type="submit">Submit payment</button>
+    </form>
+    <pre id="payment-result"></pre>
+  </section>
+
+  <section>
+    <h2>Look up payment by ID</h2>
+    <form id="lookup-form">
+      <label for="lookup-payment-id">Payment ID</label>
+      <input id="lookup-payment-id" type="number" min="1" required />
+      <button type="submit">Search</button>
+    </form>
+    <pre id="lookup-result"></pre>
+  </section>
+
+  <section>
+    <h2>Payment history for a customer</h2>
+    <form id="history-form">
+      <label for="history-customer-id">Customer ID</label>
+      <input id="history-customer-id" type="number" min="1" required />
+
+      <label for="history-limit">Limit</label>
+      <input id="history-limit" type="number" min="1" max="100" value="20" />
+
+      <button type="submit">Load history</button>
+    </form>
+    <pre id="history-result"></pre>
+  </section>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
