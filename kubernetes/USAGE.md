@@ -44,19 +44,25 @@ It's consumed two ways:
 
 ### `secrets.yaml`
 
-A `Secret` named `minipay-db-credentials` holding only `DB_PASSWORD`. The
-committed file contains the literal placeholder `CHANGE_ME`, never a real
-credential — the header comment explains how to either edit an untracked
-local copy or create the Secret imperatively with
-`kubectl create secret generic ... --from-literal=...` instead, so a real
-password never has to touch this repository at all.
+A `Secret` named `minipay-db-credentials` holding two values: `DB_PASSWORD`
+and `API_KEY` (the latter added once MiniPay's API started requiring a
+shared-secret `X-API-Key` on every `/api/*` request — see
+`MiniPay/README.md`). The committed file contains only the literal
+placeholder `CHANGE_ME` for each, never a real credential — the header
+comment explains how to either edit an untracked local copy or create the
+Secret imperatively with `kubectl create secret generic ... --from-literal=...`
+instead, so real values never have to touch this repository at all.
 
-It's consumed two ways, both reading the *same* key so the API and the
-database can never authenticate with different passwords:
+`DB_PASSWORD` is consumed two ways, both reading the *same* key so the API
+and the database can never authenticate with different passwords:
 - `deployment.yaml`: `env: DB_PASSWORD` via `valueFrom.secretKeyRef`.
 - `postgres-statefulset.yaml`: `env: POSTGRES_PASSWORD` via
   `valueFrom.secretKeyRef` against the identical `minipay-db-credentials` /
   `DB_PASSWORD` reference.
+
+`API_KEY` is consumed once, by `deployment.yaml`'s `env: API_KEY`, and read
+by the application itself (`app/config.py`) to validate the `X-API-Key`
+header on incoming requests.
 
 ### `postgres-statefulset.yaml`
 
@@ -93,7 +99,7 @@ findings #1–#6 and #8 in `investigation/kubernetes-findings.md`:
 |---|---|
 | #2 readiness probe hit the wrong port (8081) | `readinessProbe.httpGet.port: 8000` |
 | #4 `image: YOUR_IMAGE_HERE` placeholder | Real (registry-placeholder) image reference with an explicit tag, plus a comment telling the operator exactly what to replace it with |
-| #5 only `DB_HOST` was supplied; app requires more | `envFrom.configMapRef` (all non-secret settings) + `env.DB_PASSWORD` from the Secret |
+| #5 only `DB_HOST` was supplied; app requires more | `envFrom.configMapRef` (all non-secret settings) + `env.DB_PASSWORD`/`env.API_KEY` from the Secret |
 | #6 manifest assumed port 8080; the built image listens on 8000 | `containerPort`, `readinessProbe`, and `livenessProbe` all use `8000`, matching `MiniPay/backend/Dockerfile`'s `CMD` |
 | #8 no resource requests/limits | `resources.requests`/`limits` added |
 
@@ -128,7 +134,7 @@ Each row is a bullet from `requirements/03-kubernetes-rancher.md`:
 | StatefulSets | `postgres-statefulset.yaml` | `minipay-db` `StatefulSet`, 1 replica |
 | Services | `service.yaml`, `postgres-statefulset.yaml` | `minipay-api` (ClusterIP) and `minipay-db` (headless) |
 | ConfigMaps | `configmap.yaml` | `minipay-api-config`, consumed by both the API and the DB |
-| Secrets without committing real values | `secrets.yaml` | `DB_PASSWORD` placeholder `CHANGE_ME`; header comment documents the imperative `kubectl create secret` alternative |
+| Secrets without committing real values | `secrets.yaml` | `DB_PASSWORD`/`API_KEY` placeholders `CHANGE_ME`; header comment documents the imperative `kubectl create secret` alternative |
 | Readiness and liveness probes | `deployment.yaml` (`httpGet /health` on 8000), `postgres-statefulset.yaml` (`pg_isready` exec probes) | Both resources define both probe types |
 | CPU/memory requests and limits | `deployment.yaml`, `postgres-statefulset.yaml` | Every container has `resources.requests` and `resources.limits` |
 | Persistent database storage | `postgres-statefulset.yaml` | `volumeClaimTemplates`, 2Gi `ReadWriteOnce` PVC per pod |

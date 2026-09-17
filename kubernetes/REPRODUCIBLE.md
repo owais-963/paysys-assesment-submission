@@ -23,6 +23,7 @@ export REPO_ROOT=<REPO_ROOT>
 export KUBE_NAMESPACE=minipay
 export MINIPAY_IMAGE=<YOUR_REGISTRY>/minipay-api:<TAG>
 export DB_PASSWORD=<REAL_DB_PASSWORD>
+export API_KEY=<REAL_API_KEY>
 ```
 - `REPO_ROOT` — absolute path to this repository on the Linux host.
 - `KUBE_NAMESPACE` — matches `namespace.yaml`; only needs changing if you
@@ -32,6 +33,9 @@ export DB_PASSWORD=<REAL_DB_PASSWORD>
   it), tagged and pushed to a registry the cluster can pull from.
 - `DB_PASSWORD` — the real database password. Never written into
   `kubernetes/secrets.yaml`; used only in the imperative command in Step 4.
+- `API_KEY` — the real shared secret MiniPay's API requires via
+  `X-API-Key` on every `/api/*` request (generate with, e.g.,
+  `openssl rand -hex 32`). Same handling as `DB_PASSWORD`.
 
 ## 2. Build and push the API image (if not already done)
 
@@ -50,16 +54,18 @@ kubectl apply -f "$REPO_ROOT/kubernetes/namespace.yaml"
 ```
 - Creates the `minipay` namespace every other resource is scoped into.
 
-## 4. Create the database credential Secret
+## 4. Create the credentials Secret
 
 ```bash
 kubectl create secret generic minipay-db-credentials \
   --namespace "$KUBE_NAMESPACE" \
-  --from-literal=DB_PASSWORD="$DB_PASSWORD"
+  --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+  --from-literal=API_KEY="$API_KEY"
 ```
-- Creates the Secret imperatively from the `$DB_PASSWORD` shell variable,
-  so the real password is never written to `kubernetes/secrets.yaml` or
-  committed to this repository. (If you'd rather apply the YAML file
+- Creates the Secret imperatively from the `$DB_PASSWORD`/`$API_KEY` shell
+  variables, so neither real value is ever written to
+  `kubernetes/secrets.yaml` or committed to this repository. (If you'd
+  rather apply the YAML file
   directly, edit an untracked local copy of `kubernetes/secrets.yaml` first
   and replace `CHANGE_ME` with the real value, then
   `kubectl apply -f <that local copy>` instead of this command.)
@@ -135,6 +141,7 @@ kubectl get pvc -n "$KUBE_NAMESPACE"
 kubectl get endpoints minipay-api -n "$KUBE_NAMESPACE"
 kubectl port-forward -n "$KUBE_NAMESPACE" svc/minipay-api 8000:80 &
 curl -s http://127.0.0.1:8000/health
+curl -s -H "X-API-Key: $API_KEY" "http://127.0.0.1:8000/api/payments/search?transaction_ref=none"
 kill %1
 ```
 - `kubectl get all` — confirms the Deployment, StatefulSet, Services, and
@@ -145,9 +152,11 @@ kill %1
   pod IPs behind it (this is exactly what was broken in
   `starter/kubernetes/broken-api.yaml` — see
   `investigation/kubernetes-findings.md`).
-- `kubectl port-forward` + `curl .../health` — confirms the API is
+- `kubectl port-forward` + first `curl .../health` — confirms the API is
   actually reachable end-to-end and can reach the database, expecting
   `{"status":"ok","db":"reachable"}`.
+- Second `curl`, with `X-API-Key` — confirms an authenticated `/api/*`
+  route works too, expecting `{"query_ref":"none","count":0,"items":[]}`.
 
 ## Restart, rollout, and log inspection
 
