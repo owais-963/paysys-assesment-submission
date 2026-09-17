@@ -13,4 +13,7 @@ MiniPay/backend/**/__pycache__/
 # Python support CLI (Objective 4)
 python/.env
 
+# Linux evidence (Objective 7): runtime health-check output, not source
+evidence/health-check-logs/
+
 

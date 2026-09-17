@@ -2,14 +2,23 @@
 # Simple, repeatable health check for the host running MiniPay.
 # Usage: ./health-check.sh
 # Env overrides: MINIPAY_API_BASE_URL (default http://127.0.0.1:8000),
-#                DISK_THRESHOLD_PCT (default 90)
+#                DISK_THRESHOLD_PCT (default 90),
+#                HEALTH_CHECK_LOG_DIR (default ./health-check-logs)
 set -uo pipefail
 
 API_URL="${MINIPAY_API_BASE_URL:-http://127.0.0.1:8000}"
 DISK_THRESHOLD_PCT="${DISK_THRESHOLD_PCT:-90}"
+LOG_DIR="${HEALTH_CHECK_LOG_DIR:-./health-check-logs}"
 status=0
 
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/health-check-$(date -u +%Y%m%dT%H%M%SZ).log"
+# Mirror everything below to both the terminal and a timestamped log file,
+# so a run triggered by cron/CI still leaves reproducible evidence behind.
+exec > >(tee "$LOG_FILE") 2>&1
+
 echo "== MiniPay host health check: $(date -u +%Y-%m-%dT%H:%M:%SZ) =="
+echo "Logging this run to: $LOG_FILE"
 
 echo "-- OS / kernel --"
 uname -a
@@ -53,5 +62,6 @@ if [ "$status" -eq 0 ]; then
 else
   echo "== Overall: ISSUES DETECTED (see WARNING/FAILED lines above) =="
 fi
+echo "Full output saved to: $LOG_FILE"
 
 exit "$status"
