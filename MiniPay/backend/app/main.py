@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.auth import require_api_key
 from app.config import settings
 from app.database import close_pool, init_pool
 from app.exceptions import ConflictError, NotFoundError
@@ -23,10 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# /health is intentionally unauthenticated (used as a liveness/readiness
+# check). Every /api/* route requires the X-API-Key header.
 app.include_router(health_router)
-app.include_router(customer_router)
-app.include_router(payments_router)
-app.include_router(customer_payments_router)
+app.include_router(customer_router, dependencies=[Depends(require_api_key)])
+app.include_router(payments_router, dependencies=[Depends(require_api_key)])
+app.include_router(customer_payments_router, dependencies=[Depends(require_api_key)])
 
 
 @app.on_event("startup")
