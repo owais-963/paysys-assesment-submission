@@ -97,6 +97,10 @@ SKIPPED [1] tests\api\test_error_handling.py:26: Requires a MiniPay instance who
   query parameter, requires the API key like every other `/api/*` route,
   and asserts the response envelope shape.
 
-All test data created during this run (`customer_ref` / `transaction_ref`
-values prefixed `APITEST` / `APITXN`) was deleted from the database
-afterward so the seeded Objective 1 dataset is left unmodified.
+The suite itself does not delete anything it creates -- there is no
+teardown fixture in `conftest.py`. All test data created during this run
+(`customer_ref` / `transaction_ref` values prefixed `APITEST` / `APITXN`)
+was removed manually afterward with a one-off `DELETE` run directly
+against the database, so the seeded Objective 1 dataset is left
+unmodified. Running the suite again without that manual step will leave
+new `APITEST`/`APITXN` rows in place.

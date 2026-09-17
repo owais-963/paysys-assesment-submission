@@ -104,9 +104,12 @@ real `{"detail": "Invalid or missing API key"}` body from `app/auth.py` —
 both confirm the UI surfaces the actual API error rather than failing
 silently or misreporting success.
 
-Test data created during this run (`customer_ref` / `transaction_ref`
-values prefixed `UITEST` / `UITXN`) was deleted from the database
-afterward, leaving the seeded Objective 1 dataset unmodified.
+Neither `conftest.py` nor any test here deletes what it creates -- there is
+no teardown fixture. Test data created during this run (`customer_ref` /
+`transaction_ref` values prefixed `UITEST` / `UITXN`) was removed manually
+afterward with a one-off `DELETE` run directly against the database,
+leaving the seeded Objective 1 dataset unmodified. Running the suite again
+without that manual step will leave new `UITEST`/`UITXN` rows in place.
 
 ## CI integration
 
