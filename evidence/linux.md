@@ -2,15 +2,18 @@
 
 This document is the reproducible command set for Objective 7
 (`requirements/01-linux-git.md`). Each section names the exact command(s)
-to run on the target Linux host and explains what the output shows. The
-commands were written and reviewed on this (non-Linux) development
-environment; **actual output has not been captured yet** and is left as an
-explicit placeholder below each command, to be pasted in from a real run
-on the target Linux host rather than fabricated here.
+to run on the target Linux host and explains what the output shows.
 
-> Every output block below reads `<PASTE OUTPUT HERE>` until filled in.
-> Do not replace a placeholder with invented output — leave it as-is if a
-> command hasn't been run yet.
+**Target host:** `instance-20260917-081300`, a GCP VM (`k3s`/Ubuntu-based
+kernel `7.0.0-1011-gcp`). Sections 1, 2 (disk/memory), 3, 6, and 8 below
+contain real output captured on 2026-09-17/18 from that host, via
+`evidence/health-check.sh`. Sections 2 (CPU-specific: `uptime`/`nproc`),
+4, 5, and 7 have not been run yet on that host and are still left as an
+explicit `<PASTE OUTPUT HERE>` placeholder — not fabricated.
+
+> A `<PASTE OUTPUT HERE>` placeholder means that specific command has not
+> been run on the target host yet. Do not replace one with invented
+> output.
 
 ## 1. OS / kernel identification
 
@@ -20,6 +23,13 @@ cat /etc/os-release
 ```
 - `uname -a` — kernel name, version, and architecture.
 - `/etc/os-release` — distribution name and version.
+
+```
+$ uname -a
+Linux instance-20260917-081300 7.0.0-1011-gcp #11-Ubuntu SMP PREEMPT Tue Aug 11 17:32:26 UTC 2026 x86_64 GNU/Linux
+```
+
+`/etc/os-release` has not been captured yet on this host:
 
 ```
 <PASTE OUTPUT HERE>
@@ -41,9 +51,38 @@ df -h
 - `free -h` — total/used/available memory and swap, human-readable.
 - `df -h` — used/available space per mounted filesystem.
 
+`uptime` and `nproc` have not been captured yet on this host:
+
 ```
 <PASTE OUTPUT HERE>
 ```
+
+`free -h` and `df -h`, captured 2026-09-18 via `evidence/health-check.sh`
+(full run in section 8):
+
+```
+$ free -h
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       1.6Gi        10Gi       125Mi       3.9Gi        13Gi
+Swap:             0B          0B          0B
+
+$ df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root        58G  5.3G   52G  10% /
+tmpfs           7.9G  1.1M  7.9G   1% /dev/shm
+tmpfs           3.2G  2.6M  3.2G   1% /run
+efivarfs        256K   32K  220K  13% /sys/firmware/efi/efivars
+tmpfs           7.9G   64M  7.8G   1% /tmp
+/dev/sda13      989M   86M  837M  10% /boot
+/dev/sda15      105M  6.3M   99M   7% /boot/efi
+tmpfs           1.6G  8.0K  1.6G   1% /run/user/1003
+```
+(Root filesystem `/` at 10% used, 52G available. The full `df -h` output
+also lists a large number of `overlay`/`tmpfs`/`shm` mounts under
+`/run/k3s/containerd/...` — one per running k3s/containerd sandbox on this
+host; each shows the same 10%-used overlay on the shared root disk, so
+they're omitted here as redundant with the `/` line above. The complete,
+unfiltered listing is in the raw log under section 8.)
 
 ## 3. Listening ports and relevant processes
 
@@ -56,9 +95,35 @@ ss -tulpn
   PostgreSQL, if colocated) are actually listening where expected, and
   surfaces anything unexpected also listening on the host.
 
+Captured 2026-09-18 via `evidence/health-check.sh`, TCP `LISTEN` sockets
+only (full output, including UDP, is in section 8):
+
 ```
-<PASTE OUTPUT HERE>
+Netid  State   Local Address:Port   Process
+tcp    LISTEN  127.0.0.1:44589      containerd (pid 6727)
+tcp    LISTEN  127.0.0.1:10248      k3s-server (pid 7429)
+tcp    LISTEN  127.0.0.1:10249      k3s-server (pid 7429)
+tcp    LISTEN  127.0.0.1:10258      k3s-server (pid 7429)
+tcp    LISTEN  127.0.0.1:10259      k3s-server (pid 7429)
+tcp    LISTEN  127.0.0.1:10256      k3s-server (pid 7429)
+tcp    LISTEN  127.0.0.1:10257      k3s-server (pid 7429)
+tcp    LISTEN  127.0.0.1:10010      containerd (pid 7457)
+tcp    LISTEN  0.0.0.0:8020         python (pid 55957)      <- MiniPay frontend static server
+tcp    LISTEN  127.0.0.1:6444       k3s-server (pid 7429)
+tcp    LISTEN  0.0.0.0:22           sshd
+tcp    LISTEN  127.0.0.1:5432       postgres (pid 26458)    <- MiniPay database
+tcp    LISTEN  127.0.0.54:53        systemd-resolve
+tcp    LISTEN  127.0.0.53:53        systemd-resolve
+tcp    LISTEN  *:6443               k3s-server (pid 7429)    <- Kubernetes API server
+tcp    LISTEN  [::]:22              sshd
+tcp    LISTEN  *:10250              k3s-server (pid 7429)
 ```
+
+**Notable at capture time:** PostgreSQL (`5432`) and the MiniPay frontend
+static server (`8020`) were both up; **the MiniPay API itself was not
+listening on any port** — consistent with section 8's `curl .../health`
+failure below. No process was bound to `8000`/`8080` (the ports MiniPay's
+backend uses) at capture time.
 
 ## 4. DNS / network connectivity checks
 
@@ -108,9 +173,23 @@ ps -eo pid,ppid,%mem,%cpu,cmd --sort=-%mem | head -n 11
   parent PID, CPU share, and the command line — the starting point for
   "why is this host low on memory."
 
+Captured 2026-09-18 via `evidence/health-check.sh` (top 5 shown; full
+command uses `head -n 11` for top 10):
+
 ```
-<PASTE OUTPUT HERE>
+    PID    PPID %MEM %CPU CMD
+   7429       1  4.3  9.1 /usr/local/bin/k3s server
+   7457    7429  1.1  0.8 containerd
+   9752    9449  0.6  0.0 traefik traefik --entryPoints...
+   6968       1  0.5  0.0 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+   9070    8890  0.4  0.5 /metrics-server --cert-dir=/tmp --secure-port=10250 ...
 ```
+
+The top memory consumer at capture time is `k3s server` (4.3% of 15Gi ≈
+~660MB) — expected, since this host runs a full k3s control plane
+alongside MiniPay, not MiniPay-specific memory pressure. Neither
+PostgreSQL nor a MiniPay API process appears in the top 5 (the API wasn't
+running at capture time — see section 3).
 
 ## 7. Disk usage by directory
 
@@ -142,11 +221,52 @@ The script itself checks: OS/kernel identification, the MiniPay API's
 configurable threshold (default 90%, flagged with `WARNING`), memory
 (`free -h`), the top memory-consuming process, and listening ports — then
 exits `0` if everything looked fine or `1` if any check failed/warned, so
-it can be wired into a monitoring cron job or CI step directly.
+it can be wired into a monitoring cron job or CI step directly. It also
+mirrors its own output to a timestamped file under
+`evidence/health-check-logs/` (git-ignored — runtime output, not source)
+via `HEALTH_CHECK_LOG_DIR`/`tee`, so a cron/CI-triggered run still leaves
+evidence behind without needing its terminal output captured separately.
+
+Real run, captured 2026-09-18 on `instance-20260917-081300`
+(`(.venv) root@instance-20260917-081300:.../evidence# bash ./health-check.sh`):
 
 ```
-<PASTE OUTPUT HERE>
+== MiniPay host health check: 2026-09-17T22:47:49Z ==
+-- OS / kernel --
+Linux instance-20260917-081300 7.0.0-1011-gcp #11-Ubuntu SMP PREEMPT Tue Aug 11 17:32:26 UTC 2026 x86_64 GNU/Linux
+
+-- API health (http://127.0.0.1:8000/health) --
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Could not connect to server
+API health check FAILED (unreachable or non-200 response)
+
+-- Disk usage --
+[df -h output -- see section 2 above for the deduplicated summary;
+ full listing includes one overlay/tmpfs/shm mount per running
+ k3s/containerd sandbox, all at the same 10% used as the root disk]
+
+-- Memory --
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       1.6Gi        10Gi       125Mi       3.9Gi        13Gi
+Swap:             0B          0B          0B
+
+-- Top memory-consuming process --
+[see section 6 above]
+
+-- Listening ports --
+[see section 3 above]
+
+== Overall: ISSUES DETECTED (see WARNING/FAILED lines above) ==
 ```
+
+**Overall: ISSUES DETECTED — expected and explained, not a real incident:**
+the script correctly flagged that `http://127.0.0.1:8000/health` was
+unreachable, because the MiniPay API process was not running on this host
+at the time of this capture (only PostgreSQL and the static frontend
+server were up — section 3). This is exactly the kind of failure this
+script is designed to catch; it has not yet been re-run with the MiniPay
+API actually started on this host to confirm a clean `== Overall: OK ==`
+result, which is the natural next step before treating this host's setup
+as fully verified.
 
 ## Investigation playbooks
 
