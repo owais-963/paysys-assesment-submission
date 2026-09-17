@@ -4,6 +4,23 @@ function renderResult(el, result) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const apiKeyInput = document.getElementById("api-key");
+  try {
+    const savedKey = window.localStorage.getItem("minipay_api_key");
+    if (savedKey) apiKeyInput.value = savedKey;
+  } catch (err) {
+    // localStorage unavailable (private browsing, blocked storage, etc.) --
+    // the field just stays empty; every request still works if the key is
+    // typed in manually.
+  }
+  apiKeyInput.addEventListener("input", () => {
+    try {
+      window.localStorage.setItem("minipay_api_key", apiKeyInput.value);
+    } catch (err) {
+      // ignore -- see note above
+    }
+  });
+
   const healthOut = document.getElementById("health-result");
   document.getElementById("check-health").addEventListener("click", async () => {
     renderResult(healthOut, await MiniPayApi.health());
@@ -35,6 +52,13 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     const id = document.getElementById("lookup-payment-id").value;
     renderResult(lookupOut, await MiniPayApi.getPayment(id));
+  });
+
+  const searchOut = document.getElementById("search-result");
+  document.getElementById("search-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const transactionRef = document.getElementById("search-transaction-ref").value;
+    renderResult(searchOut, await MiniPayApi.searchPaymentsByReference(transactionRef));
   });
 
   const historyOut = document.getElementById("history-result");
