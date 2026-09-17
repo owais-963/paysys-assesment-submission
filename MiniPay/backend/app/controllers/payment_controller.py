@@ -1,7 +1,7 @@
 from app.config import settings
 from app.exceptions import NotFoundError
 from app.models import customer_model, payment_model
-from app.schemas.payment_schema import PaymentCreate, PaymentListOut, PaymentOut
+from app.schemas.payment_schema import PaymentCreate, PaymentListOut, PaymentOut, PaymentSearchOut
 
 
 def create_payment(conn, payload: PaymentCreate) -> PaymentOut:
@@ -12,6 +12,18 @@ def create_payment(conn, payload: PaymentCreate) -> PaymentOut:
         conn, payload.transaction_ref, payload.customer_id, payload.amount
     )
     return PaymentOut(**row)
+
+
+def search_payments_by_transaction_ref(conn, transaction_ref: str) -> PaymentSearchOut:
+    # A search/collection endpoint: no match is a valid, successful result
+    # (an empty list), not a 404 -- unlike get_payment, which fetches one
+    # specific resource by its unique id.
+    rows = payment_model.get_payments_by_transaction_ref(conn, transaction_ref)
+    return PaymentSearchOut(
+        query_ref=transaction_ref,
+        count=len(rows),
+        items=[PaymentOut(**row) for row in rows],
+    )
 
 
 def get_payment(conn, payment_id: int) -> PaymentOut:
