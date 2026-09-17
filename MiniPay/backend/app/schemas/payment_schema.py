@@ -28,3 +28,9 @@ class PaymentListOut(BaseModel):
     offset: int
     returned_count: int
     has_more: bool
+
+
+class PaymentSearchOut(BaseModel):
+    query_ref: str
+    count: int
+    items: list[PaymentOut]
