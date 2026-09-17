@@ -173,10 +173,13 @@ individual failures.
 
 - `investigation/INCIDENT-00{1,2,3}-RCA.md` do not exist yet (Objective 6).
 - `evidence/rancher.md` does not exist yet (Objective 5's Rancher portion).
-- `evidence/linux.md`'s command output is still a placeholder awaiting a
-  real run on the target Linux host (Objective 7) — the health-check
-  script's control flow was verified locally, but its Linux-specific
-  commands (`free`, `ss`, `ps -eo`) have not produced real output yet.
+- `evidence/linux.md` is partially real now (Objective 7): OS/kernel,
+  memory/disk, listening ports, and top memory consumer were captured
+  from an actual run on the target Linux host (a GCP `k3s` VM), including
+  a genuine, explained `curl .../health` failure (the MiniPay API wasn't
+  running on that host at capture time). `uptime`/`nproc`,
+  DNS/public-API reachability, application logs, and disk-usage-by-directory
+  are still placeholders awaiting a run.
 
 See `README.md`'s "Objective status" table for the same information at a
 glance.

@@ -73,7 +73,7 @@ Written plainly so the actual state of the submission is never in doubt:
 | 4. Python support CLI | Done — `--transaction`/`--health`/`--stuck-summary`, unit-tested, verified against live data | `python/` |
 | 5. Kubernetes | Manifests + findings done; **`evidence/rancher.md` does not exist yet** — Rancher inspection/evidence is not started | `kubernetes/`, `investigation/kubernetes-findings.md` |
 | 6. Incident investigations | **Not started yet** — no `investigation/INCIDENT-00X-RCA.md` files exist yet | `investigation/` |
-| 7. Linux evidence | Command set and health-check script written and validated for control-flow correctness; **actual command output on a real Linux host is still a placeholder** in `evidence/linux.md` | `evidence/linux.md` |
+| 7. Linux evidence | Partially done — OS/kernel, memory/disk, listening ports, and top memory consumer captured for real from the target Linux host (a GCP `k3s` VM); `uptime`/`nproc`, DNS/public-API reachability, app logs, and disk-usage-by-directory **are still placeholders** in `evidence/linux.md` | `evidence/linux.md`, `evidence/health-check.sh` |
 | 8. Documentation | This set of documents | repo root |
 
 Nothing above is glossed over: where a deliverable is a template awaiting
