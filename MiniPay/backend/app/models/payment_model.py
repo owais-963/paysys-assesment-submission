@@ -19,6 +19,24 @@ def insert_payment(conn, transaction_ref: str, customer_id: int, amount: Decimal
         return cur.fetchone()
 
 
+def get_payments_by_transaction_ref(conn, transaction_ref: str) -> list[dict]:
+    # transaction_ref has no uniqueness constraint in database/schema.sql,
+    # and the Objective 1 seed data intentionally contains duplicates (see
+    # sql/04_duplicate_transaction_references.sql) -- this returns every
+    # matching row rather than assuming there is only one.
+    with get_dict_cursor(conn) as cur:
+        cur.execute(
+            """
+            SELECT id, transaction_ref, customer_id, amount, status, created_at, completed_at, failure_code
+            FROM transactions
+            WHERE transaction_ref = %s
+            ORDER BY created_at DESC
+            """,
+            (transaction_ref,),
+        )
+        return cur.fetchall()
+
+
 def get_payment_by_id(conn, payment_id: int) -> dict | None:
     with get_dict_cursor(conn) as cur:
         cur.execute(
