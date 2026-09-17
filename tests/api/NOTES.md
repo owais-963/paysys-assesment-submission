@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document describes the operational considerations for integrating with and supporting the MiniPay REST API from an L2 engineering perspective.
+This document describes the operational considerations for integrating with and supporting the MiniPay REST API from a **Support Engineer perspective**.
 
-The automated API suite validates normal requests, invalid input, unknown resources, duplicate submissions, response schemas, HTTP behavior, dependency failures where practical, and basic response-time expectations.
+The API test suite is implemented as black-box HTTP automation using `pytest` and `requests`. Tests communicate with the running MiniPay service through its public HTTP interface and do not import application internals or directly manipulate the database.
 
-The tests are implemented as black-box HTTP tests using `pytest` and `requests`. They communicate with the running MiniPay API rather than importing application internals.
+The suite covers successful requests, validation failures, unknown resources, authentication, duplicate payment submissions, transaction-reference search, response schemas, server/dependency failures where practical, and basic response-time assertions.
 
 ---
 
@@ -18,7 +18,7 @@ Install the test dependencies:
 pip install -r tests/api/requirements.txt
 ```
 
-By default, the tests expect MiniPay at:
+The default API address is:
 
 ```text
 http://127.0.0.1:8000
@@ -30,167 +30,180 @@ A different environment can be selected using:
 MINIPAY_API_BASE_URL=<MiniPay API address>
 ```
 
-Run the complete suite from the repository root:
+Every `/api/*` endpoint requires the configured API key.
+
+Set the same API key configured on the running MiniPay instance:
 
 ```bash
-python -m pytest tests/api
+export MINIPAY_API_KEY=<configured API key>
 ```
 
-The suite performs a health check before starting and aborts with a clear error if the MiniPay API is unavailable.
+Run the complete API suite from the repository root:
 
-The latest recorded execution is available in `tests/api/RESULT.md`.
+```bash
+MINIPAY_API_KEY=<configured API key> python -m pytest tests/api
+```
+
+The test session first verifies `/health`. It aborts with a clear error if the API is unavailable or if `MINIPAY_API_KEY` has not been configured.
+
+The latest recorded execution collected 37 tests:
+
+```text
+36 passed
+1 skipped
+0 failed
+```
+
+The skipped test is an intentional database-unavailable fault-injection test that must only be enabled against an isolated environment.
 
 ---
 
 # 1. Client and Server Timeouts
 
-Every network request should have a defined timeout. A payment integration should never wait indefinitely for an API or dependency to respond.
+Every external API request should have a defined timeout. A payment integration should never wait indefinitely for a server or dependency.
 
-The automated MiniPay tests therefore use explicit request timeouts, for example:
+The MiniPay API tests therefore use explicit request timeouts, for example:
 
 ```python
 requests.get(url, timeout=5)
 ```
 
-or:
+and:
 
 ```python
 requests.post(url, json=payload, timeout=10)
 ```
 
-A timeout does not necessarily mean that the server did not process the request.
+A client timeout does not necessarily mean that the server failed to process the payment.
 
 For example:
 
 ```text
 Client
-  |
-  | POST payment
-  v
-MiniPay
-  |
-  | Payment created
-  v
+   |
+   | POST payment
+   v
+MiniPay API
+   |
+   | transaction committed
+   v
 Database
-  |
-  X Response times out before reaching client
+   |
+   X response does not reach client before timeout
 ```
 
-From the client's perspective, the result is uncertain: the payment may have been created even though no successful response was received.
+The client now has an uncertain result. The transaction may exist even though the client did not receive a successful response.
 
-For this reason, a timed-out payment request should not automatically be treated as a failed payment.
+### Support Engineer Handling
 
-### L2 handling
+When investigating a payment timeout, I would check:
 
-When investigating a timeout, I would check:
+- API availability and `/health`;
+- application/reverse-proxy logs;
+- database connectivity;
+- transaction reference;
+- whether the transaction already exists;
+- API and dependency latency;
+- network errors;
+- where the timeout occurred.
 
-- whether MiniPay is reachable;
-- application and reverse-proxy logs;
-- database availability;
-- request/transaction reference;
-- whether the payment already exists;
-- dependency latency;
-- whether the timeout occurred at the client, API, proxy, or database layer.
-
-The transaction should be checked before deciding whether another payment submission is safe.
+The transaction state should be established before deciding whether another payment submission is safe.
 
 ---
 
 # 2. Retries
 
-Retries are useful for temporary failures, but they must be controlled.
-
-Examples of potentially transient failures include:
+Retries can help recover from transient failures such as:
 
 ```text
 connection timeout
 connection reset
-HTTP 502 Bad Gateway
-HTTP 503 Service Unavailable
-HTTP 504 Gateway Timeout
+502 Bad Gateway
+503 Service Unavailable
+504 Gateway Timeout
 ```
 
-A retry strategy should normally use:
+Retries should be controlled using:
 
 - a limited number of attempts;
-- increasing delay between attempts;
-- preferably exponential backoff;
-- optional jitter to avoid many clients retrying simultaneously.
+- increasing delays;
+- exponential backoff where appropriate;
+- jitter where many clients could retry simultaneously.
 
 For example:
 
 ```text
-Attempt 1
+Request
    |
    X 503
-
-wait
-
-Attempt 2
+   |
+ wait
+   |
+ Retry
    |
    X 503
-
-wait longer
-
-Attempt 3
+   |
+ wait longer
+   |
+ Retry
    |
    + success
 ```
 
-Retries should not be performed blindly for every HTTP response.
-
-A request rejected because of invalid data will normally continue to fail regardless of how many times it is retried.
+Retries should not be applied blindly to all failures.
 
 For example:
 
 ```text
-422 Invalid amount
+422 Unprocessable Entity
 ```
 
-should be corrected rather than retried.
+caused by a negative payment amount is a deterministic validation failure. Retrying the same request will not correct it.
 
-### Payment-specific risk
+Payment `POST` retries require additional care because the original payment may already have been committed.
 
-Retrying a `POST /api/payments` request is particularly sensitive because the original request may have reached MiniPay even if the client did not receive the response.
-
-Without reliable idempotency, automatically retrying a payment creation request can create duplicate payments.
-
-Therefore retry behavior must be considered together with idempotency.
+Therefore payment retries must be designed together with idempotency.
 
 ---
 
-# 3. Payment Idempotency
+# 3. Idempotency and Duplicate Payments
 
-Idempotency means that repeating the same logical payment request does not create additional financial transactions.
+Idempotency means that repeating the same logical payment request does not create an additional financial transaction.
 
-For example, the desired behavior in a production payment API would typically be:
+A production-safe behavior could look like:
 
 ```text
 POST payment
-transaction/idempotency reference = ABC123
-        |
-        v
+Idempotency-Key: ABC123
+       |
+       v
 Payment 50001 created
 
-Network failure occurs
+Client loses response
 
-Client retries ABC123
-        |
-        v
-Existing Payment 50001 returned
+POST payment
+Idempotency-Key: ABC123
+       |
+       v
+Existing result for Payment 50001 returned
 ```
 
-rather than:
+instead of:
 
 ```text
-ABC123 -> Payment 50001
-
-ABC123 -> Payment 50002
+Request 1 -> Payment 50001
+Request 2 -> Payment 50002
 ```
 
 ## Current MiniPay Behavior
 
-The current MiniPay implementation intentionally allows duplicate `transaction_ref` values because the supplied database schema does not define `transaction_ref` as unique and the supplied assessment dataset contains duplicate references.
+The supplied MiniPay data model does not enforce uniqueness on:
+
+```text
+transactions.transaction_ref
+```
+
+and the supplied assessment dataset intentionally contains duplicate transaction references.
 
 The automated test:
 
@@ -198,105 +211,164 @@ The automated test:
 test_duplicate_transaction_ref_is_not_idempotent
 ```
 
-submits the same transaction reference twice and confirms that two different payment IDs are created.
+submits the same `transaction_ref` twice.
 
-Therefore, **the current MiniPay payment-creation endpoint is not idempotent**.
-
-The test documents the actual system behavior rather than assuming idempotency that the implementation does not provide.
-
-## Production Approach
-
-In a production payment integration, I would not rely only on `transaction_ref` uniqueness if historical/business requirements allow duplicate references.
-
-A stronger design would use a dedicated idempotency mechanism, for example:
+The current API returns:
 
 ```text
-Idempotency-Key: <unique request key>
+First request  -> 201 -> Payment A
+Second request -> 201 -> Payment B
 ```
 
-The server would persist the key together with the result of the original request.
+with different payment IDs.
 
-If the same key is received again with the same request, the original result can be returned instead of creating another payment.
+Therefore the current MiniPay payment-creation operation is **not idempotent**.
 
-If the same key is reused with a different request payload, the API should reject the request rather than silently treating it as the same transaction.
+The automated test deliberately records this actual behavior rather than incorrectly assuming that `transaction_ref` is unique.
 
-This allows the business model to continue supporting non-unique historical `transaction_ref` values while providing safe retry behavior for payment creation.
+## Production Recommendation
 
----
-
-# 4. HTTP 4xx Errors
-
-HTTP 4xx responses normally indicate that the request cannot be processed because of something related to the request, resource, or caller.
-
-MiniPay tests cover examples including:
-
-```text
-404 Not Found
-409 Conflict
-405 Method Not Allowed
-422 Unprocessable Entity
-```
-
-Examples from the automated suite include:
-
-- missing required customer fields → `422`;
-- empty `customer_ref` → `422`;
-- zero or negative payment amount → `422`;
-- invalid `customer_id` type → `422`;
-- unknown customer → `404`;
-- unknown payment → `404`;
-- duplicate unique `customer_ref` → `409`;
-- unsupported HTTP method → `405`;
-- malformed JSON → `422`.
-
-### L2 handling
-
-A 4xx response should normally be investigated from the request side first.
+I would separate the business transaction reference from the request idempotency mechanism.
 
 For example:
 
 ```text
-422
+transaction_ref = business/payment reference
+Idempotency-Key = unique request/retry identifier
 ```
 
-means I would inspect:
+The server could persist the idempotency key together with the original request/result.
 
-- JSON structure;
-- required fields;
-- data types;
-- validation constraints;
-- field values.
+A repeated request using the same key and same payload could return the original result without creating another payment.
 
-A:
+Reuse of the same idempotency key with a different payload should be rejected.
 
-```text
-404
-```
-
-means I would verify:
-
-- requested resource ID;
-- environment;
-- whether the resource was previously created;
-- whether the caller is using the correct endpoint.
-
-A:
-
-```text
-409
-```
-
-indicates a conflict with current resource state, such as attempting to create a customer with an already existing unique `customer_ref`.
-
-Blind retries are normally inappropriate for deterministic 4xx validation failures.
+This would allow historical/business duplicate transaction references while still making network retries safe.
 
 ---
 
-# 5. HTTP 5xx Errors
+# 4. Authentication and Access Control
 
-HTTP 5xx responses indicate that the server or one of its required dependencies could not successfully complete an otherwise acceptable request.
+MiniPay implements a simple shared API-key authentication mechanism.
+
+Every:
+
+```text
+/api/*
+```
+
+endpoint requires:
+
+```text
+X-API-Key: <configured key>
+```
+
+The health endpoint intentionally remains unauthenticated:
+
+```text
+GET /health
+```
+
+so infrastructure and monitoring systems can perform health checks without application credentials.
+
+The automated suite validates the following behavior:
+
+| Scenario | Expected |
+|---|---:|
+| `/health` without API key | `200` |
+| `/api/*` without API key | `401` |
+| `/api/*` with incorrect API key | `401` |
+| `/api/*` with correct API key | Request proceeds |
+
+The tests specifically include:
+
+```text
+test_health_requires_no_api_key
+test_protected_endpoint_without_api_key_returns_401
+test_protected_endpoint_with_wrong_api_key_returns_401
+test_protected_endpoint_with_correct_api_key_succeeds
+```
+
+The transaction-reference search endpoint is also protected:
+
+```text
+GET /api/payments/search
+```
+
+and is independently verified to return `401` without the API key.
+
+### Support Engineer Handling
+
+For a `401` response, I would first verify:
+
+- whether `X-API-Key` was supplied;
+- whether the correct environment's credential is being used;
+- whether the header name is correct;
+- whether the configured server-side key matches;
+- whether a deployment/configuration change recently modified the key.
+
+Credentials must never be printed in investigation evidence, application logs, Git history, screenshots, or support tickets.
+
+### Production Consideration
+
+The shared API key is intentionally a simple mechanism suitable for demonstrating access-control behavior in this assessment.
+
+A production payment platform would normally require stronger identity and authorization controls such as OAuth/OIDC, short-lived service credentials, scoped permissions, credential rotation, auditing, and appropriate secret management.
+
+---
+
+# 5. HTTP 4xx Errors
+
+HTTP 4xx responses normally indicate a problem with the request, requested resource, authentication, or current resource state.
+
+The MiniPay suite validates:
+
+```text
+401 Unauthorized
+404 Not Found
+405 Method Not Allowed
+409 Conflict
+422 Unprocessable Entity
+```
 
 Examples include:
+
+- missing API key → `401`;
+- incorrect API key → `401`;
+- unknown customer → `404`;
+- unknown payment → `404`;
+- unknown route → `404`;
+- unsupported HTTP method → `405`;
+- duplicate unique `customer_ref` → `409`;
+- missing required fields → `422`;
+- zero/negative amount → `422`;
+- incorrect field type → `422`;
+- malformed JSON → `422`;
+- missing required search parameter → `422`.
+
+### Support Engineer Handling
+
+A 4xx response should normally be investigated from the request/caller side before treating it as a server incident.
+
+For `401`, verify credentials and authentication configuration.
+
+For `404`, verify the resource identifier, endpoint, and target environment.
+
+For `409`, inspect the conflicting resource/state.
+
+For `422`, inspect JSON structure, required fields, field types, and validation rules.
+
+For `405`, verify that the caller is using the supported HTTP method.
+
+Deterministic 4xx failures should generally not be blindly retried.
+
+---
+
+# 6. HTTP 5xx Errors
+
+HTTP 5xx responses indicate that the API or one of its required dependencies could not successfully complete an otherwise acceptable request.
+
+Typical examples include:
 
 ```text
 500 Internal Server Error
@@ -305,148 +377,146 @@ Examples include:
 504 Gateway Timeout
 ```
 
-These errors require investigation of the server and dependency path rather than immediately assuming the client request is incorrect.
+### Support Engineer Investigation
 
-### L2 investigation flow
-
-For a MiniPay 5xx incident, I would check:
+For a MiniPay 5xx incident, I would investigate:
 
 1. `/health`;
 2. API/application logs;
 3. PostgreSQL connectivity;
-4. listening services and ports;
-5. container/process status;
-6. recent deployments or configuration changes;
+4. running process/container state;
+5. listening ports;
+6. network/DNS connectivity;
 7. resource utilization;
-8. dependency/network failures;
-9. the specific transaction/customer reference involved.
+8. recent deployments/configuration changes;
+9. the affected customer or transaction reference.
 
-The objective is to determine where the failure occurred:
+The objective is to isolate the failing layer:
 
 ```text
 Client
    |
    v
+Proxy / Network
+   |
+   v
 MiniPay API
    |
    v
-Database / Dependency
+PostgreSQL / Dependency
 ```
+
+A 5xx response should not automatically trigger a payment retry until it is known whether the original operation was committed.
 
 ---
 
-# 6. Database/Dependency Failure
+# 7. Controlled Database/Dependency Failure
 
-A genuine server-side failure should be generated through controlled fault injection rather than by corrupting source payment data.
-
-The API suite contains an opt-in database-unavailable test:
+The API suite contains an opt-in test:
 
 ```text
 test_server_error_returns_generic_envelope_when_db_unreachable
 ```
 
-It is skipped during the normal test run because automatically stopping a shared PostgreSQL instance would be unsafe.
+The test is skipped during normal execution because automatically stopping PostgreSQL could disrupt a shared development/test database.
 
-To test this scenario, PostgreSQL should be made unavailable only in an isolated test environment and the test enabled with:
+It can be enabled in an isolated environment using:
 
-```text
+```bash
 MINIPAY_TEST_DB_DOWN=1
 ```
 
-The expected health behavior is:
+after intentionally making the MiniPay database unavailable.
+
+Expected health behavior:
 
 ```text
 GET /health
-       |
-       v
-Database unavailable
-       |
-       v
-HTTP 503
+     |
+     v
+PostgreSQL unavailable
+     |
+     v
+503 Service Unavailable
 ```
 
-Database-dependent API requests should return a controlled server-error response rather than exposing stack traces, database credentials, or implementation details.
+A database-dependent application request is expected to return a controlled server-side error rather than exposing database credentials, SQL details, or stack traces.
 
-After restoring PostgreSQL, `/health` should be checked again to verify service recovery.
-
-This approach demonstrates failure handling without modifying transaction records merely to force an error.
-
----
-
-# 7. Response-Time Handling
-
-The automated suite includes basic response-time assertions for:
+After restoring PostgreSQL:
 
 ```text
 GET /health
-GET /api/payments/{id}
+     |
+     v
+200 OK
 ```
 
-The current threshold is:
+should be verified before declaring recovery.
 
-```text
-500 ms
-```
-
-The purpose of this assertion is to detect an obvious response-time regression in the test environment.
-
-It is **not a load test, capacity test, SLA, or production performance benchmark**.
-
-A single API request completing below 500 ms does not demonstrate system behavior under concurrency or production traffic.
-
-A production performance assessment would additionally consider:
-
-- concurrent users;
-- throughput;
-- p50/p95/p99 latency;
-- database load;
-- network latency;
-- error rate;
-- resource utilization.
+This is controlled fault injection and is preferable to corrupting transaction/customer data simply to generate a 5xx error.
 
 ---
 
-# 8. Authentication and Access Control
+# 8. Transaction Search by Reference
 
-The current MiniPay assessment implementation does not include an authentication mechanism.
+MiniPay provides:
 
-The automated tests explicitly verify this current behavior and also verify API routing boundaries such as:
-
-```text
-unknown route       -> 404
-unsupported method  -> 405
+```http
+GET /api/payments/search?transaction_ref=<reference>
 ```
 
-This documents the implementation accurately, but **404/405 routing behavior should not be considered a replacement for authentication or authorization**.
+This is a search/collection operation rather than retrieval of one uniquely identified resource.
 
-For a production payment API, endpoints that create or retrieve payment/customer information should require authenticated and authorized callers.
+The API therefore supports three important outcomes:
 
-A production implementation could use mechanisms such as:
+```text
+Reference matches one transaction
+→ 200
+→ count = 1
 
-- OAuth 2.0 / OpenID Connect;
-- signed service credentials;
-- short-lived access tokens;
-- API keys for controlled service-to-service integrations where appropriate.
+Reference matches no transactions
+→ 200
+→ count = 0
+→ items = []
 
-Authorization should then determine which operations and resources an authenticated caller is permitted to access.
+Reference matches duplicate transactions
+→ 200
+→ count > 1
+→ all matching rows returned
+```
 
-For the assessment, the absence of authentication is a known implementation limitation rather than something silently assumed to be production-ready.
+The automated suite verifies:
+
+```text
+test_search_by_reference_finds_created_payment
+test_search_by_reference_no_match_returns_empty_list
+test_search_by_reference_returns_every_duplicate_match
+test_search_by_reference_missing_param_returns_422
+test_search_by_reference_requires_api_key
+test_search_response_schema
+```
+
+This behavior is important because `transaction_ref` is not unique in the supplied database model.
+
+The search endpoint must therefore not assume that a transaction reference always identifies exactly one database row.
+
+From a **Support Engineer perspective**, this endpoint is particularly useful during transaction investigation because a business transaction reference can be used to retrieve all matching records.
 
 ---
 
 # 9. JSON, Headers and API Contract
 
-The tests validate both HTTP behavior and response content.
+The automated tests verify more than HTTP status codes.
 
-Successful resource creation verifies the `Location` response header where applicable.
+For successful resource creation, the suite checks relevant response headers such as:
 
-Tests also validate response fields and types rather than checking only:
-
-```python
-assert response.status_code == 200
+```text
+Location
 ```
 
-For example, payment tests verify fields such as:
+The tests also verify JSON response structure and values.
+
+Payment responses are checked for fields including:
 
 ```text
 id
@@ -459,97 +529,170 @@ completed_at
 failure_code
 ```
 
-This is important because a `200` response with an incorrect JSON structure is still an API contract failure.
+Customer and payment-list response schemas are also validated.
 
-Clients should send JSON using:
+The transaction-reference search response is expected to contain:
+
+```json
+{
+    "query_ref": "...",
+    "count": 1,
+    "items": []
+}
+```
+
+and the tests verify the envelope and returned payment objects.
+
+This is important because:
+
+```text
+HTTP 200
+```
+
+alone does not prove that the API contract is correct.
+
+Clients should send JSON requests using:
 
 ```text
 Content-Type: application/json
 ```
 
-and should validate both the HTTP status and expected response structure.
+and should validate both HTTP status and response content.
 
 ---
 
-# 10. Safe and Repeatable Testing
+# 10. Response-Time Assertions
 
-API tests create their own customers and transactions using generated references prefixed with:
+The suite contains basic response-time assertions for:
 
 ```text
-APITEST
-APITXN
+GET /health
+GET /api/payments/{id}
 ```
 
-Random reference values prevent collisions between repeated test executions and avoid relying on fixed IDs from the supplied dataset.
+The configured threshold is:
 
-The suite communicates through the public HTTP API rather than directly manipulating application tables.
+```text
+500 ms
+```
 
-The supplied assessment data should not be changed merely to make a test easier to execute.
+The purpose is to identify an obvious performance regression in the test environment.
 
-Fault scenarios that require dependency failure are isolated and opt-in rather than automatically disrupting the normal test environment.
+This threshold is **not a production SLA or load test**.
+
+A single request completing below 500 ms does not demonstrate application behavior under production concurrency.
+
+Production performance validation would additionally consider:
+
+- throughput;
+- concurrent requests;
+- p50/p95/p99 latency;
+- error rates;
+- database utilization;
+- application resource utilization;
+- network latency.
 
 ---
 
-# 11. Current Automated Test Coverage
+# 11. Safe and Repeatable Testing
 
-The current suite contains automated coverage for:
+Tests that create resources generate unique references using UUID-based values such as:
+
+```text
+APITEST...
+APITXN...
+```
+
+This reduces collisions with the seeded assessment dataset and previous test runs.
+
+The suite uses the public HTTP interface instead of directly inserting or changing database rows.
+
+The pre-test health check prevents a large number of misleading failures when the API itself is unavailable.
+
+The suite also requires `MINIPAY_API_KEY` before starting so authenticated tests do not all fail because of missing test configuration.
+
+Dependency fault injection remains opt-in so normal test execution cannot intentionally stop a shared PostgreSQL service.
+
+---
+
+# 12. Current Automated Coverage
+
+The current suite covers:
 
 - API health;
 - successful customer creation;
 - customer response schema;
-- invalid/missing customer fields;
+- missing/invalid customer fields;
 - duplicate customer references;
 - successful payment creation;
 - payment response schema;
-- invalid/missing payment fields;
-- non-positive payment amounts;
-- incorrect data types;
 - unknown customers;
+- missing/invalid payment fields;
+- zero and negative payment amounts;
 - payment retrieval;
-- unknown payments;
+- unknown payment IDs;
 - customer payment history;
-- payment-list response schema;
 - unknown customer history;
-- duplicate payment submission behavior;
-- malformed JSON;
+- payment-list response schema;
+- duplicate/non-idempotent payment submission;
+- valid API-key authentication;
+- missing API key;
+- incorrect API key;
+- public health endpoint behavior;
 - unsupported HTTP methods;
 - unknown routes;
-- basic response-time thresholds;
-- controlled database-unavailable behavior as an opt-in test.
+- malformed JSON;
+- controlled database-unavailable behavior;
+- transaction-reference search;
+- no-result search;
+- duplicate-reference search;
+- search query-parameter validation;
+- search authentication;
+- search response schema;
+- basic response-time assertions.
 
-The latest recorded run collected 28 tests:
+Latest recorded result:
 
 ```text
-27 passed
-1 skipped
-0 failed
+Collected: 37
+Passed:    36
+Skipped:   1
+Failed:    0
 ```
 
-The skipped test is the intentional database-unavailable fault-injection scenario and is not executed automatically against the normal database.
+The single skipped test is the intentionally gated database-unavailable scenario.
 
 ---
 
-# 12. L2 Operational Summary
+# 13. Support Engineer Operational Summary
 
-From an L2 support perspective, payment API failures should be classified before action is taken.
+From a **Support Engineer perspective**, API failures should first be classified before corrective action is taken.
 
 ```text
-Request fails
-     |
-     +-- 4xx
-     |     |
-     |     +--> Validate request/resource/access
-     |           Do not blindly retry
-     |
-     +-- 5xx / timeout
-           |
-           +--> Check health, logs and dependencies
-                 Determine whether request was processed
-                 Check idempotency before retrying payment
+API request fails
+        |
+        +--- 401
+        |      |
+        |      +--> Verify authentication/configuration
+        |
+        +--- Other 4xx
+        |      |
+        |      +--> Validate request/resource/method
+        |            Do not blindly retry
+        |
+        +--- 5xx / timeout
+               |
+               +--> Check health
+                     Check logs
+                     Check dependencies
+                     Determine transaction state
+                     Verify idempotency before retry
 ```
 
-The most important payment-integration principle is that a communication failure does not always mean the financial operation failed.
+For payment integrations, a network failure or timeout does not prove that the financial operation failed.
 
-Before retrying a timed-out or failed payment request, the transaction state should be verified and the retry should be protected by an appropriate idempotency mechanism.
+Before retrying an uncertain payment, the existing transaction state should be checked using the available payment retrieval/search APIs.
 
-This prevents a temporary network or dependency issue from becoming a duplicate financial transaction.
+Because the current MiniPay `POST /api/payments` operation is not idempotent, automatically retrying an uncertain payment request could create a duplicate payment.
+
+A production implementation should therefore combine controlled retry behavior with a dedicated idempotency mechanism.
