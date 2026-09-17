@@ -7,7 +7,14 @@
 </head>
 <body>
   <h1>MiniPay</h1>
-  <p class="subtitle">Minimal payments console (no authentication, local/evaluation use)</p>
+  <p class="subtitle">Minimal payments console</p>
+
+  <section>
+    <h2>API Key</h2>
+    <p>Required on every request below except the health check. Kept only in this browser (localStorage), never sent anywhere but the MiniPay API configured in js/config.js.</p>
+    <label for="api-key">X-API-Key</label>
+    <input id="api-key" placeholder="Paste your MiniPay API key" autocomplete="off" />
+  </section>
 
   <section>
     <h2>Health</h2>
@@ -54,6 +61,17 @@
       <button type="submit">Search</button>
     </form>
     <pre id="lookup-result"></pre>
+  </section>
+
+  <section>
+    <h2>Search payments by transaction reference</h2>
+    <p>Returns every payment matching the reference -- more than one is possible, since transaction_ref is not unique (see sql/04_duplicate_transaction_references.sql).</p>
+    <form id="search-form">
+      <label for="search-transaction-ref">Transaction reference</label>
+      <input id="search-transaction-ref" required maxlength="50" placeholder="TXN000001" />
+      <button type="submit">Search</button>
+    </form>
+    <pre id="search-result"></pre>
   </section>
 
   <section>
