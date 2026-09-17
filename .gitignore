@@ -1,1 +1,9 @@
 paysys-implementation-l2-assessment-main/
+
+# MiniPay app
+MiniPay/backend/.venv/
+MiniPay/backend/.env
+MiniPay/backend/__pycache__/
+MiniPay/backend/**/__pycache__/
+
+
