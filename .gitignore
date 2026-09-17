@@ -6,4 +6,8 @@ MiniPay/backend/.env
 MiniPay/backend/__pycache__/
 MiniPay/backend/**/__pycache__/
 
+# Test tooling caches
+.pytest_cache/
+**/__pycache__/
+
 
