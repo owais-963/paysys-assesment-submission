@@ -39,5 +39,10 @@ class Settings:
     payments_page_size_default: int = _int("PAYMENTS_PAGE_SIZE_DEFAULT", 20)
     payments_page_size_max: int = _int("PAYMENTS_PAGE_SIZE_MAX", 100)
 
+    # Single shared API key, checked via the X-API-Key header. Deliberately
+    # minimal (no user accounts, no tokens/sessions) -- see MiniPay/README.md
+    # for why this is the right amount of complexity for this assessment.
+    api_key: str = _require("API_KEY")
+
 
 settings = Settings()
