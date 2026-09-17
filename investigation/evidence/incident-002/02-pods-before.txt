@@ -1,0 +1,5 @@
+NAME                           READY   STATUS             RESTARTS         AGE   IP           NODE                       NOMINATED NODE   READINESS GATES
+minipay-api-58456b99f7-4zhjt   0/1     CrashLoopBackOff   14 (3m58s ago)   50m   10.42.0.10   instance-20260917-081300   <none>           <none>
+minipay-api-66bb567699-6lqhl   0/1     Running            10 (8m17s ago)   22m   10.42.0.13   instance-20260917-081300   <none>           <none>
+minipay-api-6bd4fcc95f-45wf9   0/1     Running            10 (8m45s ago)   22m   10.42.0.14   instance-20260917-081300   <none>           <none>
+minipay-db-57775fb7dc-mcxbc    1/1     Running            0                36m   10.42.0.12   instance-20260917-081300   <none>           <none>

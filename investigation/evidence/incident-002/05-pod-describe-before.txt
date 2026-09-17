@@ -1,0 +1,70 @@
+Name:             minipay-api-6bd4fcc95f-45wf9
+Namespace:        minipay
+Priority:         0
+Service Account:  default
+Node:             instance-20260917-081300/10.128.0.10
+Start Time:       Thu, 17 Sep 2026 21:54:02 +0000
+Labels:           app=minipay-api
+                  pod-template-hash=6bd4fcc95f
+Annotations:      kubectl.kubernetes.io/restartedAt: 2026-09-17T21:54:02Z
+Status:           Running
+IP:               10.42.0.14
+IPs:
+  IP:           10.42.0.14
+Controlled By:  ReplicaSet/minipay-api-6bd4fcc95f
+Containers:
+  api:
+    Container ID:   containerd://aeee280908bea1dd62cd957e22a07071e049cfcfa17ed8710b48d6c41f57be03
+    Image:          minipay-api:latest
+    Image ID:       sha256:7afe61d24afde41ce30a6a0465e7cb7d54377a1a1d50d987c3ef7ccb0ab6b5c9
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu, 17 Sep 2026 22:13:21 +0000
+    Last State:     Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 17 Sep 2026 22:07:33 +0000
+      Finished:     Thu, 17 Sep 2026 22:08:03 +0000
+    Ready:          False
+    Restart Count:  10
+    Liveness:       http-get http://:8080/health delay=5s timeout=1s period=10s #success=1 #failure=3
+    Readiness:      http-get http://:8081/health delay=2s timeout=1s period=5s #success=1 #failure=3
+    Environment:
+      DB_HOST:      minipay-db
+      DB_PORT:      5432
+      DB_NAME:      minipay
+      DB_USER:      minipay
+      DB_PASSWORD:  <set to the key 'POSTGRES_PASSWORD' in secret 'minipay-db-secret'>  Optional: false
+      API_KEY:      <set to the key 'api-key' in secret 'minipay-api-secret'>           Optional: false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-wq4hg (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-wq4hg:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  23m                   default-scheduler  Successfully assigned minipay/minipay-api-6bd4fcc95f-45wf9 to instance-20260917-081300
+  Warning  Unhealthy  22m (x8 over 23m)     kubelet            spec.containers{api}: Liveness probe failed: Get "http://10.42.0.14:8080/health": dial tcp 10.42.0.14:8080: connect: connection refused
+  Normal   Created    20m (x6 over 23m)     kubelet            spec.containers{api}: Container created
+  Normal   Started    20m (x6 over 23m)     kubelet            spec.containers{api}: Container started
+  Normal   Killing    19m (x6 over 23m)     kubelet            spec.containers{api}: Container api failed liveness probe, will be restarted
+  Warning  BackOff    8m37s (x13 over 21m)  kubelet            spec.containers{api}: Back-off restarting failed container api in pod minipay-api-6bd4fcc95f-45wf9_minipay(4c4e4a6d-53d0-4c60-9043-52a9831ba250)
+  Normal   Pulled     4m24s (x11 over 23m)  kubelet            spec.containers{api}: Container image "minipay-api:latest" already present on machine and can be accessed by the pod
+  Warning  Unhealthy  3m33s (x71 over 23m)  kubelet            spec.containers{api}: Readiness probe failed: Get "http://10.42.0.14:8081/health": dial tcp 10.42.0.14:8081: connect: connection refused

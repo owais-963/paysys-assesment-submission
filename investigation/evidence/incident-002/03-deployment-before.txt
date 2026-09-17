@@ -1,0 +1,2 @@
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+minipay-api   0/2     1            0           50m

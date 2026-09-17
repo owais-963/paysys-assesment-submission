@@ -1,0 +1,5 @@
+NAME                           READY   STATUS             RESTARTS       AGE   LABELS
+minipay-api-58456b99f7-4zhjt   0/1     CrashLoopBackOff   15 (79s ago)   53m   app=minipay-api,pod-template-hash=58456b99f7
+minipay-api-66bb567699-6lqhl   0/1     Running            10 (11m ago)   25m   app=minipay-api,pod-template-hash=66bb567699
+minipay-api-6bd4fcc95f-45wf9   0/1     Running            10 (11m ago)   25m   app=minipay-api,pod-template-hash=6bd4fcc95f
+minipay-db-57775fb7dc-mcxbc    1/1     Running            0              39m   app=minipay-db,pod-template-hash=57775fb7dc

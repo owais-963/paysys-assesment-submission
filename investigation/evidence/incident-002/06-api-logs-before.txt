@@ -1,0 +1,34 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+2026-09-17 22:13:22,559 INFO minipay.database: Database connection pool initialized (min=1, max=10)
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+INFO:     10.42.0.1:53550 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:47248 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:50372 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:57810 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:46856 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:56248 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:39046 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:58712 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:48386 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:35120 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:37008 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:49622 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:60924 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:44826 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:34676 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:50018 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:57328 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:55824 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:33322 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:41382 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:48360 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:39506 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:41252 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:41888 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:52472 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:43920 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:55896 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:32942 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:41990 - "GET /health HTTP/1.1" 200 OK

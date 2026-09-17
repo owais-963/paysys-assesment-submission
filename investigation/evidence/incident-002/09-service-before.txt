@@ -1,0 +1,16 @@
+Name:                     minipay-api
+Namespace:                minipay
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=minipay-backend
+Type:                     ClusterIP
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.43.156.150
+IPs:                      10.43.156.150
+Port:                     <unset>  80/TCP
+TargetPort:               8081/TCP
+Endpoints:                
+Session Affinity:         None
+Internal Traffic Policy:  Cluster
+Events:                   <none>
