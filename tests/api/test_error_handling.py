@@ -7,6 +7,12 @@ import requests
 def test_malformed_json_body_returns_422(api_base_url):
     """A syntactically broken JSON body must be handled as a clean 4xx by
     FastAPI's request parsing, never surfaced as an unhandled crash.
+
+    Deliberately sent without an X-API-Key at all: body parsing rejects
+    this with 422 independent of authentication, verified manually to
+    return the same 422 with or without a valid key -- so this also
+    confirms request parsing isn't gated behind auth in a way that would
+    turn a malformed-body bug into a confusing 401 instead.
     """
     resp = requests.post(
         f"{api_base_url}/api/customers",
