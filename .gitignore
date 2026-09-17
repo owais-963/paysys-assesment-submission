@@ -10,4 +10,7 @@ MiniPay/backend/**/__pycache__/
 .pytest_cache/
 **/__pycache__/
 
+# Python support CLI (Objective 4)
+python/.env
+
 
