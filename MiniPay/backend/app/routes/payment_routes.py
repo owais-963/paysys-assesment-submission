@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Response
 
 from app.controllers import payment_controller
 from app.database import get_connection
-from app.schemas.payment_schema import PaymentCreate, PaymentListOut, PaymentOut
+from app.schemas.payment_schema import PaymentCreate, PaymentListOut, PaymentOut, PaymentSearchOut
 
 payments_router = APIRouter(prefix="/api/payments", tags=["payments"])
 customer_payments_router = APIRouter(prefix="/api/customers", tags=["payments"])
@@ -14,6 +14,17 @@ def create_payment(payload: PaymentCreate, response: Response):
         payment = payment_controller.create_payment(conn, payload)
     response.headers["Location"] = f"/api/payments/{payment.id}"
     return payment
+
+
+# Registered before /{payment_id} deliberately: a static path
+# ("/api/payments/search") must be matched before a dynamic one
+# ("/api/payments/{payment_id}") to avoid any path-matching ambiguity.
+@payments_router.get("/search", response_model=PaymentSearchOut)
+def search_payments_by_reference(
+    transaction_ref: str = Query(..., min_length=1, max_length=50),
+):
+    with get_connection() as conn:
+        return payment_controller.search_payments_by_transaction_ref(conn, transaction_ref)
 
 
 @payments_router.get("/{payment_id}", response_model=PaymentOut)
