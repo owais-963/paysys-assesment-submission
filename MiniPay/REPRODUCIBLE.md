@@ -29,6 +29,7 @@ export DB_PORT=<DB_PORT>
 export DB_NAME=<DB_NAME>
 export DB_USER=<DB_USER>
 export DB_PASSWORD=<DB_PASSWORD>
+export API_KEY=<API_KEY>
 export MINIPAY_IMAGE=minipay-api:latest
 export MINIPAY_CONTAINER=minipay-api
 export MINIPAY_PORT=8000
@@ -36,6 +37,8 @@ export MINIPAY_PORT=8000
 - `REPO_ROOT` — absolute path to this repository on the Linux host.
 - `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` — connection
   details for the existing PostgreSQL database from `sql/REPRODUCIBLE.md`.
+- `API_KEY` — the shared secret clients must send via `X-API-Key` on every
+  `/api/*` request (generate one with, e.g., `openssl rand -hex 32`).
 - `MINIPAY_IMAGE` — name:tag to give the built image.
 - `MINIPAY_CONTAINER` — name to give the running container.
 - `MINIPAY_PORT` — host port the API will be reachable on.
@@ -68,6 +71,7 @@ docker run -d \
   -e DB_PASSWORD="$DB_PASSWORD" \
   -e API_HOST=0.0.0.0 \
   -e API_PORT="$MINIPAY_PORT" \
+  -e API_KEY="$API_KEY" \
   -e CORS_ALLOW_ORIGINS="*" \
   -e PAYMENTS_PAGE_SIZE_DEFAULT=20 \
   -e PAYMENTS_PAGE_SIZE_MAX=100 \
@@ -92,11 +96,16 @@ docker run -d \
 ```bash
 docker ps --filter "name=$MINIPAY_CONTAINER"
 curl -s http://127.0.0.1:$MINIPAY_PORT/health
+curl -s -H "X-API-Key: $API_KEY" http://127.0.0.1:$MINIPAY_PORT/api/payments/search?transaction_ref=none
 ```
 - `docker ps --filter ...` — confirms the container is running and shows
   its status.
-- `curl .../health` — calls the API's health endpoint; expect
-  `{"status":"ok","db":"reachable"}` once the database connection succeeds.
+- `curl .../health` — calls the API's unauthenticated health endpoint;
+  expect `{"status":"ok","db":"reachable"}` once the database connection
+  succeeds.
+- The second `curl`, with `X-API-Key`, confirms an authenticated `/api/*`
+  route is reachable end-to-end; expect
+  `{"query_ref":"none","count":0,"items":[]}`.
 
 ## 5. Inspect logs
 
