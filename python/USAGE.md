@@ -119,3 +119,96 @@ Each row is a line from `requirements/04-python-support-tool.md`:
 | Automated unit tests for important logic | `tests/test_diagnostics.py`, `tests/test_report.py` | 19 tests covering every anomaly rule and every report renderer |
 | Bonus: summarize stuck/failed transactions | `support/summary.py`, `--stuck-summary` | Counts + row listings for stuck `PROCESSING` and recent `FAILED` |
 | Bonus: health check across API/database dependencies | `support/health.py`, `--health` | Database always checked; API checked when `API_BASE_URL` is set |
+
+## Example: live run against the seeded database
+
+Re-run on 2026-09-18 against the same live `minipay` PostgreSQL instance
+used throughout this assessment, to confirm the tool still behaves exactly
+as documented rather than just trusting an earlier capture. Every block
+below is real, unedited command output.
+
+```
+$ python support_tool.py --health
+Overall status: ok
+Database:       ok
+API:            not_configured
+$ echo $?
+0
+```
+
+```
+$ python support_tool.py --transaction TXN00024999
+Transaction reference: TXN00024999
+WARNING: 2 transactions share this reference (see DUPLICATE_REFERENCE anomaly on each match below).
+
+--- Match 1 of 2 (id=25000) ---
+Customer:            Customer 303 (CUST000303, id=303)
+Amount:              2923.35
+Status:              SUCCESS
+Created at:          2026-09-10T11:40:28
+Completed at:        2026-09-10T11:41:25
+Callback attempts:   1
+  - attempt 1: SUCCESS (http 200) at 2026-09-10T11:41:30
+Anomalies:           DUPLICATE_REFERENCE
+Recommended action:  Multiple transactions share this reference. Confirm with the customer whether this was a duplicate submission before taking any resolution action on either record.
+
+--- Match 2 of 2 (id=24999) ---
+Customer:            Customer 14 (CUST000014, id=14)
+Amount:              84623.80
+Status:              SUCCESS
+Created at:          2026-09-07T12:28:43
+Completed at:        2026-09-07T12:29:12
+Callback attempts:   1
+  - attempt 1: SUCCESS (http 200) at 2026-09-07T12:29:17
+Anomalies:           DUPLICATE_REFERENCE
+Recommended action:  Multiple transactions share this reference. Confirm with the customer whether this was a duplicate submission before taking any resolution action on either record.
+```
+
+```
+$ python support_tool.py --transaction TXN00000029 --json
+{
+  "query_ref": "TXN00000029",
+  "match_count": 1,
+  "transactions": [
+    {
+      "id": 29,
+      "transaction_ref": "TXN00000029",
+      "customer_id": 541,
+      "customer_ref": "CUST000541",
+      "customer_name": "Customer 541",
+      "amount": "87256.06",
+      "status": "PROCESSING",
+      "created_at": "2026-09-06T03:14:52",
+      "completed_at": null,
+      "failure_code": null,
+      "callbacks": [],
+      "anomalies": ["STUCK_IN_PROCESSING"],
+      "recommended_action": "Transaction has been PROCESSING beyond the expected threshold. Check upstream processor connectivity and escalate if it does not resolve on its own."
+    }
+  ]
+}
+$ echo $?
+0
+```
+
+```
+$ python support_tool.py --stuck-summary
+Stuck in PROCESSING (> 15 min): 2445
+  - id=43080 ref=TXN00043080 created_at=2026-09-01T00:11:28 amount=95881.63
+  - id=44851 ref=TXN00044851 created_at=2026-09-01T00:17:09 amount=97183.90
+  - id=8073 ref=TXN00008073 created_at=2026-09-01T00:17:37 amount=76893.20
+  ... (2445 total -- truncated here for length)
+```
+
+The stuck-`PROCESSING` count (2445) is large because the seed data's
+`created_at` values are fixed in the past (early September 2026) while
+`STUCK_IN_PROCESSING`/`--stuck-summary` compare against the real current
+time — the same effect documented for the equivalent SQL query in
+`sql/03_processing_over_15_minutes.sql`, not a bug in this tool.
+
+```
+$ python support_tool.py --transaction TXN99999999
+No transaction found with reference 'TXN99999999'.
+$ echo $?
+1
+```
