@@ -1,0 +1,17 @@
+# Corrected minipay-api Service. Fixes findings #1 and #3 from
+# investigation/kubernetes-findings.md: selector now matches the
+# Deployment's pod label (app: minipay-api, not minipay-backend), and
+# targetPort now matches the container's actual port (8000, not 8081).
+apiVersion: v1
+kind: Service
+metadata:
+  name: minipay-api
+  namespace: minipay
+  labels:
+    app: minipay-api
+spec:
+  selector:
+    app: minipay-api
+  ports:
+    - port: 80
+      targetPort: 8000

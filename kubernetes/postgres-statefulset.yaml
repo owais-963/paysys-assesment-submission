@@ -1,0 +1,99 @@
+# Headless Service + StatefulSet for the MiniPay database, with persistent
+# storage via volumeClaimTemplates. This gives the database a stable
+# network identity (minipay-db.minipay.svc.cluster.local) that
+# ConfigMap.DB_HOST already assumes, and survives pod restarts/rescheduling
+# without losing data.
+#
+# Note: this provisions an empty Postgres instance. Loading
+# database/schema.sql and the Objective 1 seed data into it is a separate,
+# manual step (see sql/REPRODUCIBLE.md for the equivalent local procedure;
+# the same psql commands apply here via `kubectl exec` or a port-forward),
+# intentionally not automated in this manifest.
+apiVersion: v1
+kind: Service
+metadata:
+  name: minipay-db
+  namespace: minipay
+  labels:
+    app: minipay-db
+spec:
+  clusterIP: None
+  selector:
+    app: minipay-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minipay-db
+  namespace: minipay
+spec:
+  serviceName: minipay-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minipay-db
+  template:
+    metadata:
+      labels:
+        app: minipay-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: minipay-api-config
+                  key: DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: minipay-api-config
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minipay-db-credentials
+                  key: DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: minipay-db-storage
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: minipay-db-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # storageClassName intentionally omitted -- uses the cluster's
+        # default StorageClass. Set explicitly if the target cluster
+        # requires it (e.g. Rancher-provisioned clusters commonly need
+        # "local-path" or a cloud provider's block storage class).
+        resources:
+          requests:
+            storage: 2Gi

@@ -1,0 +1,8 @@
+# Referenced by every other manifest in this directory (metadata.namespace:
+# minipay). The supplied starter/kubernetes/broken-api.yaml assumed this
+# namespace already existed (see investigation/kubernetes-findings.md,
+# finding #7) without defining it anywhere -- this file closes that gap.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minipay

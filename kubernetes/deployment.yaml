@@ -1,0 +1,68 @@
+# Corrected minipay-api Deployment. Compare against
+# starter/kubernetes/broken-api.yaml and investigation/kubernetes-findings.md
+# -- every finding recorded there is fixed here:
+#   - image is a real (placeholder-for-your-registry) reference, not
+#     YOUR_IMAGE_HERE (finding #4)
+#   - DB_NAME/DB_USER/DB_PASSWORD are supplied (via ConfigMap/Secret), not
+#     just DB_HOST (finding #5)
+#   - containerPort/probes use 8000, matching MiniPay/backend/Dockerfile's
+#     actual CMD (--port 8000), not the assumed 8080 (finding #6)
+#   - readinessProbe now targets the same port the container actually
+#     serves on (finding #2)
+#   - resources.requests/limits are set (finding #8)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minipay-api
+  namespace: minipay
+  labels:
+    app: minipay-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: minipay-api
+  template:
+    metadata:
+      labels:
+        app: minipay-api
+    spec:
+      containers:
+        - name: api
+          # Replace with the real registry path/tag for the image built
+          # from MiniPay/backend/Dockerfile, e.g.:
+          #   your-registry.example.com/minipay-api:1.0.0
+          image: REPLACE_WITH_YOUR_REGISTRY/minipay-api:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: minipay-api-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minipay-db-credentials
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3

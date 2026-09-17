@@ -1,0 +1,21 @@
+# Non-secret configuration only. DB_PASSWORD lives in secrets.yaml, never
+# here. Shared by both the minipay-api Deployment and the minipay-db
+# StatefulSet (DB_NAME/DB_USER are reused as POSTGRES_DB/POSTGRES_USER) so
+# the two never drift out of sync with each other.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minipay-api-config
+  namespace: minipay
+data:
+  DB_HOST: "minipay-db"
+  DB_PORT: "5432"
+  DB_NAME: "minipay"
+  DB_USER: "minipay"
+  DB_POOL_MIN: "1"
+  DB_POOL_MAX: "10"
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  CORS_ALLOW_ORIGINS: "*"
+  PAYMENTS_PAGE_SIZE_DEFAULT: "20"
+  PAYMENTS_PAGE_SIZE_MAX: "100"

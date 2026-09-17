@@ -1,0 +1,23 @@
+# Requires the cluster's metrics-server to be running (provides the CPU
+# metrics this HPA scales on). Rancher-provisioned clusters typically have
+# it installed by default; verify with `kubectl top pods -n minipay` if
+# scaling doesn't seem to react to load.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: minipay-api
+  namespace: minipay
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: minipay-api
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
