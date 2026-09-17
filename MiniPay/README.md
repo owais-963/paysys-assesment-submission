@@ -3,7 +3,8 @@
 A minimal, production-shaped payments API + static admin console, built for
 Objective 2 of the assessment. It connects to the same PostgreSQL database
 set up and seeded in Objective 1 (`sql/REPRODUCIBLE.md`) — no ORM, no
-authentication, no separate demo/mock data layer.
+separate demo/mock data layer. Every `/api/*` endpoint requires a minimal
+shared-secret API key (see "Authentication" below); `/health` does not.
 
 ## Structure (MVC)
 
@@ -11,9 +12,10 @@ authentication, no separate demo/mock data layer.
 MiniPay/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app: routers, CORS, exception handlers
+│   │   ├── main.py              # FastAPI app: routers, CORS, auth, exception handlers
 │   │   ├── config.py            # env-based configuration (no hard-coded values)
 │   │   ├── database.py          # psycopg2 connection pool (no ORM)
+│   │   ├── auth.py              # X-API-Key dependency, applied to every /api/* router
 │   │   ├── exceptions.py        # NotFoundError, ConflictError
 │   │   ├── models/              # raw parameterized SQL per table
 │   │   │   ├── customer_model.py
@@ -43,13 +45,14 @@ MiniPay/
 
 ## API
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/customers` | Create a customer |
-| `POST` | `/api/payments` | Submit a payment (creates a `transactions` row, status `PROCESSING`) |
-| `GET` | `/api/payments/{id}` | Look up a single payment by its numeric ID |
-| `GET` | `/api/customers/{id}/payments` | List a customer's payment history, paginated |
-| `GET` | `/health` | Liveness + database reachability check |
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/customers` | Required | Create a customer |
+| `POST` | `/api/payments` | Required | Submit a payment (creates a `transactions` row, status `PROCESSING`) |
+| `GET` | `/api/payments/{id}` | Required | Look up a single payment by its numeric ID |
+| `GET` | `/api/payments/search?transaction_ref=...` | Required | Search payments by reference (see "Search by transaction reference" below) |
+| `GET` | `/api/customers/{id}/payments` | Required | List a customer's payment history, paginated |
+| `GET` | `/health` | None | Liveness + database reachability check |
 
 Validation is enforced at the request boundary via Pydantic (required
 fields, string length limits matching the schema's `VARCHAR` sizes, `amount
@@ -66,6 +69,33 @@ fields, string length limits matching the schema's `VARCHAR` sizes, `amount
 100 via `PAYMENTS_PAGE_SIZE_MAX`) and `offset` query parameters, and returns
 `has_more` instead of a total count, so a customer with a very large
 transaction history doesn't force a full `COUNT(*)` scan on every request.
+
+## Authentication
+
+A single shared API key, checked via the `X-API-Key` header on every
+`/api/*` request (`app/auth.py`, applied per-router in `main.py`). No user
+accounts, sessions, tokens, or OAuth — deliberately the simplest mechanism
+that still requires a caller to present a credential before touching
+customer/payment data. `/health` stays unauthenticated so it still works as
+a plain liveness/readiness check for load balancers/orchestrators.
+
+- Missing or wrong key → `401` with `{"detail": "Invalid or missing API key"}`
+- Set the real value via `API_KEY` in `.env` (see `.env.example`); it is
+  never hard-coded or committed
+- The frontend has an "API Key" field (stored only in that browser's
+  `localStorage`) that attaches the header to every request it makes
+
+## Search by transaction reference
+
+`GET /api/payments/search?transaction_ref=TXN000123` — a search/collection
+endpoint, distinct from `GET /api/payments/{id}`. Returns `200` with
+`{"query_ref": ..., "count": 0, "items": []}` when nothing matches (not
+`404` — there's no single resource being fetched, so an empty result set is
+a normal, successful search outcome). `transaction_ref` has no uniqueness
+constraint in `database/schema.sql`, and the Objective 1 seed data
+intentionally contains duplicates (see
+`sql/04_duplicate_transaction_references.sql`), so this endpoint returns
+**every** matching row, not just the first one found.
 
 ## Why no ORM
 
@@ -114,7 +144,8 @@ pip install -r requirements.txt
 
 cp .env.example .env
 # edit .env with the real DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD
-# from the database set up in sql/REPRODUCIBLE.md
+# from the database set up in sql/REPRODUCIBLE.md, and set a real API_KEY
+# (e.g. `openssl rand -hex 32`)
 
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
@@ -124,7 +155,8 @@ Serve the frontend independently (any static file server works):
 ```bash
 cd MiniPay/frontend
 python -m http.server 8020
-# open http://127.0.0.1:8020 in a browser
+# open http://127.0.0.1:8020 in a browser, then paste the same API_KEY
+# into the "API Key" field before using any form
 ```
 
 Edit `frontend/js/config.js` if the API is not running at
@@ -137,9 +169,14 @@ to build and run the backend API in Docker against the existing database.
 
 ## Verified locally
 
-All 5 endpoints were exercised against the live seeded database during
+All 6 endpoints were exercised against the live seeded database during
 development: customer creation (including a duplicate `customer_ref`
 returning `409` and a missing field returning `422`), payment creation
 (including an unknown `customer_id` returning `404` and a non-positive
-`amount` returning `422`), and payment lookup by ID (including an unknown ID
-returning `404`).
+`amount` returning `422`), payment lookup by ID (including an unknown ID
+returning `404`), and search by `transaction_ref` (including a duplicated
+reference correctly returning both matches, and an unmatched reference
+returning `200` with an empty list). Authentication was verified directly:
+no key → `401`, wrong key → `401`, correct key → success; `/health`
+reachable with no key at all. See `tests/api/RESULT.md` and
+`tests/ui/Report.md` for the full automated-test evidence.
